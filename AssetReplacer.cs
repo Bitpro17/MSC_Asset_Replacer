@@ -25,10 +25,10 @@ public class AssetReplacer : Mod
     }
 
     SettingsCheckBox printDebug;
-    //const string configButtonName = "Configure Mesh Replacements";
+    const string configButtonName = "Configure Mesh Replacements";
     private void Mod_Settings()
     {
-        //Settings.AddButton(configButtonName, () => { popup.ShowPopup((string s) => SaveEverything(s)); }, SettingsButton.ButtonIcon.Settings);
+        //Settings.AddButton(configButtonName, () => { popup.ShowPopup((string s) => { OpenConfig(); }); }, SettingsButton.ButtonIcon.Settings);
         printDebug = Settings.AddCheckBox(nameof(printDebug), "Print debug text");
     }
 
@@ -39,8 +39,10 @@ public class AssetReplacer : Mod
         HandleSoundFiles();
     }
 
+    internal static AssetReplacer instance;
     void Mod_SettingsLoaded()
     {
+        instance = this;
         //CreateConfigPopup();
     }
 
@@ -50,20 +52,33 @@ public class AssetReplacer : Mod
     //    SaveLoad.WriteValue(this, nameof(jsonCrap), jsonCrap);
     //}
 
-    //PopupSetting popup;
-    //string jsonCrap;
-    //void CreateConfigPopup()
-    //{
-    //    if (jsonCrap == null)
-    //        jsonCrap = SaveLoad.ValueExists(this, nameof(jsonCrap)) ? SaveLoad.ReadValue<string>(this, nameof(jsonCrap)) : "";
-    //    popup = ModUI.CreatePopupSetting(configButtonName, "Close");
-    //    foreach (MeshConfig config in meshConfigs)
-    //    {
-    //        popup.AddText($"<color=yellow><size=35><b>{config.sourceFile}:</b></size></color>");
-    //        foreach (MeshReplacement replacement in config.replacements)
-    //            replacement.CreateOverrideSettings(config.sourceFile, popup, jsonCrap);
-    //    }
-    //}
+    PopupSetting popup;
+    SettingsDropDownList fileSelection;
+    SettingsDropDownList[] meshSelections;
+    void CreateConfigPopup()
+    {
+        popup = ModUI.CreatePopupSetting(configButtonName, "Configure");
+        fileSelection = popup.AddDropDownList("a", "File to configure:", meshConfigs.Select(x => x.sourceFile).ToArray()
+            , 0, ToggleVisibility);
+        meshSelections = new SettingsDropDownList[meshConfigs.Count];
+        for (int i = 0; i < meshConfigs.Count; ++i)
+            meshSelections[i] = popup.AddDropDownList("a", "Asset to configure:"
+                , meshConfigs[i].replacements.Select(x => x.descriptiveName).ToArray(), visibleByDefault: false);
+        meshSelections[0].SetVisibility(true);
+    }
+
+    void ToggleVisibility()
+    {
+        foreach (SettingsDropDownList list in meshSelections)
+            list.SetVisibility(false);
+        meshSelections[fileSelection.GetSelectedItemIndex()].SetVisibility(true);
+    }
+    void OpenConfig()
+    {
+        int selectedFile = fileSelection.GetSelectedItemIndex();
+        int selectedAsset = meshSelections[selectedFile].GetSelectedItemIndex();
+        meshConfigs[selectedAsset].replacements[selectedAsset].ShowConfigPopup();
+    }
 
     void LoadConfigs()
     {
@@ -107,6 +122,7 @@ public class AssetReplacer : Mod
             }
 
             config.replacements.Add(meshReplacement);
+            meshReplacement.Init(config.sourceFile);
         }
         ab.Unload(false);
     }
@@ -245,25 +261,43 @@ public class AssetReplacer : Mod
         return name;
     }
 
-    void LogDebug(string text)
+    internal static void LogDebug(string text)
     {
-        if (printDebug.GetValue())
+        if (instance.printDebug.GetValue())
             ModConsole.Log(Message(text));
     }
 
-    void Log(string text)
+    internal static void Log(string text)
     {
         ModConsole.Log(Message(text));
     }
 
-    void LogError(string text)
+    internal static void LogError(string text)
     {
         ModConsole.LogError(Message(text));
     }
 
-    string Message(string text)
+    internal static string Message(string text)
     {
         return $"<color=orange>[Asset Replacer]</color> {text}";
+    }
+}
+
+internal class CoroutineRunner : MonoBehaviour
+{
+    static CoroutineRunner instance;
+    internal static CoroutineRunner Instance
+    {
+        get
+        {
+            if (instance == null)
+            {
+                GameObject obj = new GameObject("Asset Replacer Coroutine Helper");
+                DontDestroyOnLoad(obj);
+                instance = obj.AddComponent<CoroutineRunner>();
+            }
+            return instance;
+        }
     }
 }
 #endif
